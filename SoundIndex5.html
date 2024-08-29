@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Piano Wave Interaction</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            font-family: Arial, sans-serif;
+        }
+        #canvas-container {
+            width: 100%;
+            max-width: 500px;
+            aspect-ratio: 9 / 16;
+            position: relative;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            border: 1px solid #333;
+        }
+        #controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 10px;
+            justify-content: center;
+            width: 100%;
+            max-width: 500px;
+        }
+        button {
+            padding: 5px 10px;
+            font-size: 12px;
+            background-color: #444;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+        }
+        #piano {
+            display: flex;
+            justify-content: center;
+            margin-top: 10px;
+            width: 100%;
+            max-width: 500px;
+        }
+        .key {
+            width: 7%;
+            height: 80px;
+            background-color: white;
+            border: 1px solid black;
+            margin: 0 1px;
+            cursor: pointer;
+        }
+        .key.black {
+            background-color: black;
+            height: 50px;
+            width: 5%;
+            margin-left: -2.5%;
+            margin-right: -2.5%;
+            z-index: 1;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <canvas id="canvas"></canvas>
+    </div>
+    <div id="piano"></div>
+    <div id="controls"></div>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        const notes = [
+            { name: 'C', frequency: 261.63, color: '#FF0000' },
+            { name: 'C#', frequency: 277.18, color: '#FF4500' },
+            { name: 'D', frequency: 293.66, color: '#FFA500' },
+            { name: 'D#', frequency: 311.13, color: '#FFD700' },
+            { name: 'E', frequency: 329.63, color: '#FFFF00' },
+            { name: 'F', frequency: 349.23, color: '#9ACD32' },
+            { name: 'F#', frequency: 369.99, color: '#00FF00' },
+            { name: 'G', frequency: 392.00, color: '#00FFFF' },
+            { name: 'G#', frequency: 415.30, color: '#1E90FF' },
+            { name: 'A', frequency: 440.00, color: '#0000FF' },
+            { name: 'A#', frequency: 466.16, color: '#8A2BE2' },
+            { name: 'B', frequency: 493.88, color: '#9400D3' }
+        ];
+
+        const chords = [
+            { name: 'C', notes: ['C', 'E', 'G'] },
+            { name: 'Dm', notes: ['D', 'F', 'A'] },
+            { name: 'Em', notes: ['E', 'G', 'B'] },
+            { name: 'F', notes: ['F', 'A', 'C'] },
+            { name: 'G', notes: ['G', 'B', 'D'] },
+            { name: 'Am', notes: ['A', 'C', 'E'] },
+            { name: 'B°', notes: ['B', 'D', 'F'] }
+        ];
+
+        let waves = [];
+
+        function createPiano() {
+            const pianoDiv = document.getElementById('piano');
+            notes.forEach((note, index) => {
+                const key = document.createElement('div');
+                key.className = `key ${note.name.includes('#') ? 'black' : 'white'}`;
+                key.dataset.note = note.name;
+                key.onclick = () => playNote(note);
+                pianoDiv.appendChild(key);
+            });
+        }
+
+        function createControls() {
+            const controlsDiv = document.getElementById('controls');
+            chords.forEach(chord => {
+                const button = document.createElement('button');
+                button.textContent = chord.name;
+                button.onclick = () => playChord(chord);
+                controlsDiv.appendChild(button);
+            });
+        }
+
+        function playNote(note) {
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(note.frequency, audioCtx.currentTime);
+            
+            gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1);
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 1);
+
+            addWave(note);
+            highlightKey(note.name);
+        }
+
+        function playChord(chord) {
+            chord.notes.forEach(noteName => {
+                const note = notes.find(n => n.name === noteName);
+                playNote(note);
+            });
+        }
+
+        function addWave(note) {
+            const wave = {
+                x: canvas.width / 2,
+                y: canvas.height,
+                color: note.color,
+                radius: 0,
+                maxRadius: Math.max(canvas.width, canvas.height) * 1.5,
+                speed: 2,
+                opacity: 1
+            };
+            waves.push(wave);
+        }
+
+        function drawWave(wave) {
+            ctx.beginPath();
+            ctx.arc(wave.x, wave.y, wave.radius, 0, Math.PI * 2);
+            ctx.strokeStyle = `${wave.color}${Math.floor(wave.opacity * 255).toString(16).padStart(2, '0')}`;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        function highlightKey(noteName) {
+            const key = document.querySelector(`.key[data-note="${noteName}"]`);
+            key.style.backgroundColor = notes.find(n => n.name === noteName).color;
+            setTimeout(() => {
+                key.style.backgroundColor = noteName.includes('#') ? 'black' : 'white';
+            }, 500);
+        }
+
+        function animate() {
+            ctx.fillStyle = 'rgba(26, 26, 26, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            waves.forEach(wave => {
+                wave.radius += wave.speed;
+                wave.opacity = 1 - (wave.radius / wave.maxRadius);
+                drawWave(wave);
+            });
+
+            waves = waves.filter(wave => wave.opacity > 0);
+
+            requestAnimationFrame(animate);
+        }
+
+        createPiano();
+        createControls();
+        animate();
+    </script>
+</body>
+</html>
